@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model artifacts
+fraud_sentinel_adapter/
+fraud_sentinel_model/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Local environments
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
