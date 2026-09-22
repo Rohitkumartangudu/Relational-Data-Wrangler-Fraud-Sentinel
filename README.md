@@ -123,10 +123,11 @@ The final generated artifact contains 977 predictions with unique transaction ID
 
 ```text
 .
-├── Relational_Data_Wrangler_&_Fraud_Sentinel(3).ipynb
-├── transactions.csv
-├── accounts.csv
-├── customers.csv
+├── relational_data_wrangler_fraud_sentinel.ipynb
+├── Data/
+│   ├── transactions.csv
+│   ├── accounts.csv
+│   └── customers.csv
 ├── fraud_predictions.json
 ├── requirements.txt
 ├── .gitignore
@@ -156,7 +157,7 @@ customers.csv
 Then open:
 
 ```text
-Relational_Data_Wrangler_&_Fraud_Sentinel(3).ipynb
+relational_data_wrangler_fraud_sentinel.ipynb
 ```
 
 and execute the notebook from top to bottom.
