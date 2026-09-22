@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Model artifacts
+fraud_sentinel_adapter/
+fraud_sentinel_model/
+*.safetensors
+*.bin
+*.pt
+*.pth
