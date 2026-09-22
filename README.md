@@ -12,6 +12,10 @@ The hackathon provides three deliberately messy datasets:
 
 The pipeline must clean and merge the data, neutralize prompt-injection attempts in untrusted transaction text, use an open-weight language model below 3B parameters, fine-tune the small model, and produce one strict JSON risk profile per transaction.
 
+## Data Disclosure
+
+All data in this repository (`transactions.csv`, `accounts.csv`, `customers.csv`) is synthetic, generated for this hackathon. No real customer, account, or transaction data is used or represented.
+
 ## Final Pipeline
 
 ```text
@@ -65,6 +69,10 @@ The notebook uses:
 The model is fine-tuned with QLoRA/LoRA using the cleaned transaction/account/customer features.
 
 The final inference pipeline uses the fine-tuned SLM as a secondary classifier for ambiguous transactions. Strong and low-evidence cases are handled by deterministic behavioral risk rules. This prevents unsupported model reasoning from controlling the final output.
+
+## Results
+
+_To be completed: base-model vs. fine-tuned-model agreement with weak labels on a held-out split._
 
 ## Data Processing
 
@@ -123,10 +131,11 @@ The final generated artifact contains 977 predictions with unique transaction ID
 
 ```text
 .
-├── Relational_Data_Wrangler_&_Fraud_Sentinel(3).ipynb
-├── transactions.csv
-├── accounts.csv
-├── customers.csv
+├── relational_data_wrangler_fraud_sentinel.ipynb
+├── Data/
+│   ├── transactions.csv
+│   ├── accounts.csv
+│   └── customers.csv
 ├── fraud_predictions.json
 ├── requirements.txt
 ├── .gitignore
@@ -156,7 +165,7 @@ customers.csv
 Then open:
 
 ```text
-Relational_Data_Wrangler_&_Fraud_Sentinel(3).ipynb
+relational_data_wrangler_fraud_sentinel.ipynb
 ```
 
 and execute the notebook from top to bottom.
@@ -172,6 +181,8 @@ The notebook includes deterministic random seeds, but exact model-training resul
 The supplied dataset does not include verified fraud labels, so conventional supervised metrics such as accuracy, precision, recall, and F1 cannot be calculated against ground truth.
 
 The SLM is therefore used within a hybrid architecture rather than being treated as an independently validated fraud classifier.
+
+The provided dataset does not include a text field (notes, description, etc.) on transactions, so the prompt-injection sanitizer (see "Adversarial Prompt Injection") is implemented but not exercised by the supplied data. A synthetic test suite with injected adversarial notes is used separately to validate the sanitizer (see `tests/` — added in a later update).
 
 ## Submission
 
