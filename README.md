@@ -72,7 +72,13 @@ The final inference pipeline uses the fine-tuned SLM as a secondary classifier f
 
 ## Results
 
-_To be completed: base-model vs. fine-tuned-model agreement with weak labels on a held-out split._
+Evaluated on a held-out split (see "Evaluation Methodology" below).
+
+_Numbers to be added once the eval cell runs._
+
+### Evaluation Methodology
+
+This evaluates agreement between the fine-tuned model's `is_fraud` output and the weak-label rule, on examples held out from fine-tuning but drawn from the same confident-bucket distribution (score ≥4 or ≤1) used to build the training set. It does not measure performance on the ambiguous middle band (score 1.0–4.0) that the model actually classifies in production, since no ground truth exists there to check against. Improvement here should be read as "the model learned to reproduce the rule on unseen examples," not as a measure of real-world fraud-detection accuracy.
 
 ## Data Processing
 
