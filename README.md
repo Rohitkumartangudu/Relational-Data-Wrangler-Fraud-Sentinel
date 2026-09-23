@@ -72,13 +72,36 @@ The final inference pipeline uses the fine-tuned SLM as a secondary classifier f
 
 ## Results
 
-Evaluated on a held-out split (see "Evaluation Methodology" below).
+Evaluated on a 40-example held-out split (20 fraud / 20 non-fraud, stratified,
+never seen during fine-tuning). See "Evaluation Methodology" below for what
+this measures and does not measure.
 
-_Numbers to be added once the eval cell runs._
+| Model             | Valid JSON | Agreement with weak label | Behavior                        |
+|--------------------|-----------|----------------------------|----------------------------------|
+| Base (no adapter)  | 38/40     | 19/38 (50.0%)               | Predicted `is_fraud: true` for every valid output |
+| Fine-tuned (LoRA)  | 36/40     | 18/36 (50.0%)               | Predicted `is_fraud: true` for every valid output |
+
+Both models collapsed to always predicting fraud, regardless of the input features — the 50% agreement is exactly what a coin flip would score against
+a balanced set, not evidence of reasoning. This was confirmed by inspecting raw generations directly: justifications cited features inconsistently
+(e.g. citing *low* credit utilization, normally a low-risk signal, as evidence of fraud), and a follow-up check showed the fine-tuned model also
+scored 50% (9/18) on a sample of its own **training** data — meaning it had not learned to discriminate the task at all, not merely failed to generalize.
+
+### Root cause
+
+The SFT training cell builds each example as a single flat chat-template string (system + user + assistant turns) and hands it to `SFTTrainer` with
+no completion-only loss masking. By default, this computes training loss across every token in the sequence, including the long, largely-boilerplate
+user turn (transaction JSON + instructions). The assistant turn — the one part that actually encodes the fraud/non-fraud label — is a small fraction
+of the total tokens, so its contribution to the gradient was diluted by the much longer, more repetitive, and easier-to-predict prompt text. Loss
+dropped during training, but that mostly reflects the model getting better at predicting prompt boilerplate, not at classifying transactions.
+
+A fix (completion-only loss masking) is scoped as follow-up work; see [open items] below.
 
 ### Evaluation Methodology
 
-This evaluates agreement between the fine-tuned model's `is_fraud` output and the weak-label rule, on examples held out from fine-tuning but drawn from the same confident-bucket distribution (score ≥4 or ≤1) used to build the training set. It does not measure performance on the ambiguous middle band (score 1.0–4.0) that the model actually classifies in production, since no ground truth exists there to check against. Improvement here should be read as "the model learned to reproduce the rule on unseen examples," not as a measure of real-world fraud-detection accuracy.
+This evaluates agreement between each model's `is_fraud` output and the weak-label rule, on examples held out from fine-tuning but drawn from the
+same confident-bucket distribution (score ≥4 or ≤1) used to build the training set. It does not measure performance on the ambiguous middle band
+(score 1.0–4.0) that the model actually classifies in production, since no ground truth exists there to check against. Given the result above, it also
+currently cannot demonstrate any benefit from fine-tuning, since neither model learned the task.
 
 ## Data Processing
 
@@ -189,6 +212,11 @@ The supplied dataset does not include verified fraud labels, so conventional sup
 The SLM is therefore used within a hybrid architecture rather than being treated as an independently validated fraud classifier.
 
 The provided dataset does not include a text field (notes, description, etc.) on transactions, so the prompt-injection sanitizer (see "Adversarial Prompt Injection") is implemented but not exercised by the supplied data. A synthetic test suite with injected adversarial notes is used separately to validate the sanitizer (see `tests/` — added in a later update).
+
+## Open Items
+
+Re-run fine-tuning with completion-only loss masking (mask the loss to the assistant turn only) and re-evaluate against the same held-out split, to test whether
+the model can actually learn to discriminate fraud vs. non-fraud once the training signal isn't diluted by prompt tokens.
 
 ## Submission
 
