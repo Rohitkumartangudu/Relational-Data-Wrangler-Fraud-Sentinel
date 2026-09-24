@@ -217,6 +217,19 @@ and execute the notebook from top to bottom.
 
 The notebook downloads the Qwen model from Hugging Face, prepares it for 4-bit loading, fine-tunes a LoRA adapter, runs hybrid inference, validates the generated schema, and writes `fraud_predictions.json`.
 
+## Testing
+
+A standalone test suite validates the prompt-injection sanitizer against both known attack patterns and deliberately-varied phrasings, independent of the notebook (the provided dataset has no text field to exercise it against directly — see "Limitations").
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/test_sanitizer.py -v
+```
+
+23 tests, covering: known injection patterns (redacted), benign merchant names (untouched), missing values (handled safely), and known bypass cases (confirmed to currently evade detection — see "Limitations").
+
+Note: `tests/test_sanitizer.py` duplicates the sanitizer logic from the notebook's Cell 6, since that logic isn't yet extracted into an importable module. See "Open Items."
+
 ## Reproducibility
 
 The notebook includes deterministic random seeds, but exact model-training results can still vary with GPU/runtime/library versions. The training configuration is intentionally kept compatible with the environment used during development.
@@ -227,7 +240,11 @@ The supplied dataset does not include verified fraud labels, so conventional sup
 
 The SLM is therefore used within a hybrid architecture rather than being treated as an independently validated fraud classifier.
 
-The provided dataset does not include a text field (notes, description, etc.) on transactions, so the prompt-injection sanitizer (see "Adversarial Prompt Injection") is implemented but not exercised by the supplied data. A synthetic test suite with injected adversarial notes is used separately to validate the sanitizer (see `tests/` — added in a later update).
+The provided dataset does not include a text field (notes, description, etc.) on transactions, so the prompt-injection sanitizer 
+(see "Adversarial Prompt Injection") is implemented but not exercised by the supplied data. A synthetic test suite (`tests/test_sanitizer.py`, 23 cases) 
+validates the sanitizer separately: it correctly redacts all 11 known injection patterns and leaves benign merchant text untouched, but 5 deliberately-varied 
+phrasings (paraphrases, a non-English phrase, spacing evasion, restructured sentences) confirm it as a brittle, pattern-matching defense — novel phrasing 
+bypasses it. See "Testing" below to run it yourself.
 
 ## Open Items
 
@@ -236,6 +253,7 @@ The provided dataset does not include a text field (notes, description, etc.) on
   against there. The 85% held-out figure only covers the same confident-bucket distribution used for training.
 - LoRA config (`r=8`, attention-only target modules) and the exact learning-rate/epoch values were not swept — the current settings were found by manual 
   adjustment to fix the degenerate collapse, not tuned for best performance.
+- Extract the sanitizer logic (currently only in notebook Cell 6) into a shared, importable module so `tests/test_sanitizer.py` doesn't need to duplicate it.
 
 ## Submission
 
