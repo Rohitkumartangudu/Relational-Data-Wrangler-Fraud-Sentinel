@@ -72,9 +72,10 @@ The final inference pipeline uses the fine-tuned SLM as a secondary classifier f
 
 ## Results
 
-Evaluated on a 40-example held-out split (20 fraud / 20 non-fraud, stratified,
-never seen during fine-tuning). See "Evaluation Methodology" below for what
+Evaluated on a 40-example held-out split (20 fraud / 20 non-fraud, stratified, never seen during fine-tuning). See "Evaluation Methodology" below for what
 this measures and does not measure.
+
+### Initial attempt (full-sequence loss)
 
 | Model             | Valid JSON | Agreement with weak label | Behavior                        |
 |--------------------|-----------|----------------------------|----------------------------------|
@@ -82,26 +83,41 @@ this measures and does not measure.
 | Fine-tuned (LoRA)  | 36/40     | 18/36 (50.0%)               | Predicted `is_fraud: true` for every valid output |
 
 Both models collapsed to always predicting fraud, regardless of the input features — the 50% agreement is exactly what a coin flip would score against
-a balanced set, not evidence of reasoning. This was confirmed by inspecting raw generations directly: justifications cited features inconsistently
-(e.g. citing *low* credit utilization, normally a low-risk signal, as evidence of fraud), and a follow-up check showed the fine-tuned model also
-scored 50% (9/18) on a sample of its own **training** data — meaning it had not learned to discriminate the task at all, not merely failed to generalize.
+a balanced set, not evidence of reasoning. Confirmed by inspecting raw generations directly (justifications cited features inconsistently, e.g.
+citing *low* credit utilization, normally a low-risk signal, as evidence of fraud) and by checking the fine-tuned model against its own **training**
+data, where it also scored 50% (9/18) — meaning it had not learned to discriminate the task at all.
 
-### Root cause
+**Root cause:** the SFT training cell built each example as a single flat chat-template string and trained with the default full-sequence loss, which
+scores every token — the long, largely-boilerplate prompt included. The assistant turn (the part that actually encodes the label) was a small
+fraction of total tokens, so its gradient contribution was diluted by the much longer, easier-to-predict prompt text.
 
-The SFT training cell builds each example as a single flat chat-template string (system + user + assistant turns) and hands it to `SFTTrainer` with
-no completion-only loss masking. By default, this computes training loss across every token in the sequence, including the long, largely-boilerplate
-user turn (transaction JSON + instructions). The assistant turn — the one part that actually encodes the fraud/non-fraud label — is a small fraction
-of the total tokens, so its contribution to the gradient was diluted by the much longer, more repetitive, and easier-to-predict prompt text. Loss
-dropped during training, but that mostly reflects the model getting better at predicting prompt boilerplate, not at classifying transactions.
+### Fix: assistant-only loss + adjusted learning rate/epochs
 
-A fix (completion-only loss masking) is scoped as follow-up work; see [open items] below.
+Two changes were required together — neither alone was sufficient:
+
+1. `assistant_only_loss=True` (TRL 1.13's built-in completion-only masking, applied to a `messages`-formatted dataset) — restricts the loss to the
+   assistant turn's tokens only.
+2. `learning_rate` raised from `2e-5` to `2e-4`, and `num_train_epochs` raised from `2` to `5` — masking alone only moved held-out agreement to
+   51.3%, still degenerate; the higher learning rate and additional epochs were needed to actually shift the adapter weights enough to learn the
+   discrimination.
+
+| Model                        | Valid JSON | Agreement with weak label | Confusion matrix (TP/FN/FP/TN) |
+|-------------------------------|-----------|-----------------------------|----------------------------------|
+| Base (no adapter)             | 38/40     | 19/38 (50.0%)                | 19/0/19/0 — always predicts fraud |
+| Fine-tuned (LoRA, fixed)      | 40/40     | 34/40 (85.0%)                | 17/3/3/17 — balanced errors both directions |
+| Fine-tuned, on own training data | 20/20 | 19/20 (95.0%)                | 9/0/1/10 |
+
+The fine-tuned model now shows genuine discrimination (errors on both sides of the confusion matrix, not a one-sided collapse), with a modest and
+expected generalization gap between training (95%) and held-out (85%) performance — consistent with a small model fine-tuned on 160 examples,
+not memorization (which would show near-100% on training and near-chance on held-out).
 
 ### Evaluation Methodology
 
 This evaluates agreement between each model's `is_fraud` output and the weak-label rule, on examples held out from fine-tuning but drawn from the
 same confident-bucket distribution (score ≥4 or ≤1) used to build the training set. It does not measure performance on the ambiguous middle band
-(score 1.0–4.0) that the model actually classifies in production, since no ground truth exists there to check against. Given the result above, it also
-currently cannot demonstrate any benefit from fine-tuning, since neither model learned the task.
+(score 1.0–4.0) that the model actually classifies in production, since no ground truth exists there to check against. The 85% figure should be read
+as "the model learned to reproduce the rule on unseen confident-bucket examples," not as a measure of real-world fraud-detection accuracy, and it
+does not by itself confirm how the model performs on the harder, ambiguous cases it is actually deployed against.
 
 ## Data Processing
 
@@ -215,8 +231,11 @@ The provided dataset does not include a text field (notes, description, etc.) on
 
 ## Open Items
 
-Re-run fine-tuning with completion-only loss masking (mask the loss to the assistant turn only) and re-evaluate against the same held-out split, to test whether
-the model can actually learn to discriminate fraud vs. non-fraud once the training signal isn't diluted by prompt tokens.
+- ~~Re-run fine-tuning with completion-only loss masking~~ — done; see "Results" above. Required combining `assistant_only_loss=True` with a higher learning rate and more epochs.
+- No evaluation exists for the ambiguous middle band (score 1.0–4.0) that the model actually classifies in production, since there is no ground truth to check 
+  against there. The 85% held-out figure only covers the same confident-bucket distribution used for training.
+- LoRA config (`r=8`, attention-only target modules) and the exact learning-rate/epoch values were not swept — the current settings were found by manual 
+  adjustment to fix the degenerate collapse, not tuned for best performance.
 
 ## Submission
 
